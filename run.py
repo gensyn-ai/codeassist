@@ -226,6 +226,8 @@ def setup_persistent_volume():
                 f"{model_file} exists in trainer/models directory, using file for inference"
             )
 
+    subprocess.run(f"chmod -R 777 {PERSISTENT_DATA_DIR}", shell=True)
+
     logger.info(
         f"Persistent volume structure created at {PERSISTENT_DATA_DIR.absolute()}"
     )
