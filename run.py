@@ -88,22 +88,44 @@ def detect_docker():
 
     CONSOLE.print("Looking for a container engine...", style=INFO_COLOR)
 
+    # Option 1: Try the default Docker environment first (without specifying a specific path)
     try:
-        logger.info("Checking for Docker...")
+        logger.info("Checking for default Docker...")
         DOCKER_CLIENT = docker.from_env()
         DOCKER_CLIENT.ping()
-        logger.info("Docker is installed and running.")
+        logger.info("Docker is installed and running (default environment).")
         return True
     except docker.errors.DockerException as e:
-        logger.info(f"Docker not found or not running: {e}")
+        logger.info(f"Default Docker not found or not running: {e}")
 
-    # Check for Colima (macOS/Linux)
+    # Option 2: Try various possible paths for Docker Desktop on macOS
+    if sys.platform == "darwin":
+        possible_paths = [
+            # Docker Desktop 的标准路径
+            "unix:///var/run/docker.sock",
+            # 用户目录下的 Docker socket
+            f"unix://{os.path.expanduser('~')}/.docker/run/docker.sock",
+            # Homebrew Docker 的可能路径
+            "unix:///usr/local/var/run/docker.sock",
+        ]
+
+        for docker_host in possible_paths:
+            try:
+                logger.info(f"Trying Docker at {docker_host}")
+                DOCKER_CLIENT = docker.from_env(environment={"DOCKER_HOST": docker_host})
+                DOCKER_CLIENT.ping()
+                logger.info(f"Docker found at {docker_host}")
+                return True
+            except docker.errors.DockerException as e:
+                logger.info(f"Docker not found at {docker_host}: {e}")
+                continue
+
+    # Option 3: Check Colima
     try:
         logger.info("Checking for Colima...")
         home = os.path.expanduser("~")
-        DOCKER_CLIENT = docker.from_env(
-            environment={"DOCKER_HOST": f"unix://{home}/.colima/default/docker.sock"}
-        )
+        colima_socket = f"unix://{home}/.colima/default/docker.sock"
+        DOCKER_CLIENT = docker.from_env(environment={"DOCKER_HOST": colima_socket})
         DOCKER_CLIENT.ping()
         logger.info("Colima is installed and running.")
         return True
@@ -111,7 +133,6 @@ def detect_docker():
         logger.info(f"Colima not found or not running: {e}")
 
     return False
-
 
 def cleanup_incomplete_episodes(episodes_root: Path) -> None:
     """Remove episode directories missing their finalized snapshot JSON."""
