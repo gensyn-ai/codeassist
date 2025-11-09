@@ -97,6 +97,38 @@ export function MonacoEditor({ initValue, problemId, onChange, assistantPaused, 
       },
     });
 
+    // Fix font measurement inaccuracies on high-DPI displays (with debounce)
+    const ratio = window.devicePixelRatio || 1;
+    editor.updateOptions({
+      pixelRatio: ratio,
+      fontLigatures: false,
+      fontFamily: 'JetBrains Mono, Consolas, monospace'
+    });
+
+    // Debounced resize handler to avoid frequent pixelRatio updates
+    let resizeTimer: number | undefined;
+
+    const handleResize = () => {
+      // Clear any pending timer if resize continues
+      if (resizeTimer) {
+        clearTimeout(resizeTimer);
+      }
+
+      // Update pixelRatio after user stops resizing for ~200ms
+      resizeTimer = window.setTimeout(() => {
+        const newRatio = window.devicePixelRatio || 1;
+
+        // Only update when devicePixelRatio actually changes
+        if (newRatio !== editor.getOption(monaco.editor.EditorOption.pixelRatio)) {
+          editor.updateOptions({ pixelRatio: newRatio });
+          editor.layout(); // Ensure cursor and text alignment are refreshed
+        }
+      }, 200);
+    };
+
+    // Register resize listener
+    window.addEventListener('resize', handleResize);
+
     setEditor(editor);
 
     // Call the onEditorMount callback if provided
@@ -106,6 +138,10 @@ export function MonacoEditor({ initValue, problemId, onChange, assistantPaused, 
 
     // Cleanup
     return () => {
+      window.removeEventListener('resize', handleResize);
+      if (resizeTimer) {
+        clearTimeout(resizeTimer);
+      }
       editor.dispose();
       if (onEditorMount) {
         onEditorMount(null);
