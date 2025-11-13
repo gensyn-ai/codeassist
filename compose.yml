@@ -1,5 +1,6 @@
 services:
   ollama:
+    container_name: codeassist-ollama
     image: ollama/ollama:0.11.10
     networks:
       - codeassist_network
@@ -9,12 +10,13 @@ services:
       - ./ollama-data:/root/.ollama
 
   web-ui:
+    container_name: codeassist-web-ui
     build:
       context: ./web-ui
       args:
-        - NEXT_PUBLIC_TESTER_URL=http://localhost:8008
-        - NEXT_PUBLIC_STATE_SERVICE_URL=http://localhost:8000
-        - NEXT_PUBLIC_POLICY_MODELS_URL=http://localhost:8001
+        - NEXT_PUBLIC_TESTER_URL=/api/tester
+        - NEXT_PUBLIC_STATE_SERVICE_URL=/api/backend
+        - NEXT_PUBLIC_POLICY_MODELS_URL=/api/policy
         - NEXT_PUBLIC_ALCHEMY_API_KEY=wvs3CE89g2JwoshNNCMe1
     networks:
       - codeassist_network
@@ -26,12 +28,13 @@ services:
       - PERSISTENT_DATA_DIR=/app/persistent-data
 
   simulation-ui:
+    container_name: codeassist-simulation-ui
     build:
       context: ./web-ui
       args:
-        - NEXT_PUBLIC_TESTER_URL=http://localhost:8008
-        - NEXT_PUBLIC_STATE_SERVICE_URL=http://localhost:8000
-        - NEXT_PUBLIC_POLICY_MODELS_URL=http://localhost:8001
+        - NEXT_PUBLIC_TESTER_URL=/api/tester
+        - NEXT_PUBLIC_STATE_SERVICE_URL=/api/backend
+        - NEXT_PUBLIC_POLICY_MODELS_URL=/api/policy
         - NEXT_PUBLIC_SIMULATION_MODE=true
         - NEXT_PUBLIC_ALCHEMY_API_KEY=wvs3CE89g2JwoshNNCMe1
     networks:
@@ -44,12 +47,13 @@ services:
       - PERSISTENT_DATA_DIR=/app/persistent-data
 
   zero-style-ui:
+    container_name: codeassist-zero-style-ui
     build:
       context: ./web-ui
       args:
-        - NEXT_PUBLIC_TESTER_URL=http://localhost:8008
-        - NEXT_PUBLIC_STATE_SERVICE_URL=http://localhost:8000
-        - NEXT_PUBLIC_POLICY_MODELS_URL=http://localhost:8001
+        - NEXT_PUBLIC_TESTER_URL=/api/tester
+        - NEXT_PUBLIC_STATE_SERVICE_URL=/api/backend
+        - NEXT_PUBLIC_POLICY_MODELS_URL=/api/policy
         - NEXT_PUBLIC_ZERO_STYLE_MODE=true
     networks:
       - codeassist_network
@@ -61,6 +65,7 @@ services:
       - PERSISTENT_DATA_DIR=/app/persistent-data
 
   state-service:
+    container_name: codeassist-state-service
     build: ./state-service
     networks:
       - codeassist_network
@@ -70,14 +75,15 @@ services:
       - ./persistent-data:/app/persistent-data
       - ./datasets:/app/datasets
     environment:
-      - OLLAMA_BASE_URL=http://ollama:11434
-      - OLLAMA_HOST=http://ollama:11434
+      - OLLAMA_BASE_URL=http://codeassist-ollama:11434
+      - OLLAMA_HOST=http://codeassist-ollama:11434
       - PERSISTENT_DATA_DIR=/app/persistent-data
-      - SOLUTION_TESTER_BASE_URL=http://solution-tester:8008
-      - POLICY_MODEL_BASE_URL=http://policy-models:8001
+      - SOLUTION_TESTER_BASE_URL=http://codeassist-solution-tester:8008
+      - POLICY_MODEL_BASE_URL=http://codeassist-policy-model:8001
       - TELEMETRY_BASE_URL=http://telemetry-api.telemetry-api-staging.svc.internal-apps-central1.clusters.gensyn.ai
 
   solution-tester:
+    container_name: codeassist-solution-tester
     build: ./solution-tester
     networks:
       - codeassist_network
@@ -87,6 +93,7 @@ services:
       - ./persistent-data:/app/persistent-data
   
   policy-models:
+    container_name: codeassist-policy-model
     build: ./policy_models
     networks:
       - codeassist_network
@@ -96,8 +103,8 @@ services:
       - ./persistent-data:/app/persistent-data
     environment:
       - DEVICE=cpu
-      - OLLAMA_BASE_URL=http://ollama:11434
-      - OLLAMA_HOST=http://ollama:11434
+      - OLLAMA_BASE_URL=http://codeassist-ollama:11434
+      - OLLAMA_HOST=http://codeassist-ollama:11434
       - PERSISTENT_DATA_DIR=/app/persistent-data
       - ASM_ASSISTANT_MODEL_PATH=/app/persistent-data/trainer/models/asm_assistant_model.pt
       - ASM_FEATURIZER_PATH=/app/persistent-data/trainer/models/asm_featurizer.pt

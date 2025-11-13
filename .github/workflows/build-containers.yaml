@@ -32,8 +32,8 @@ jobs:
           tags: gensynai/codeassist-web-ui:${{ github.ref_name }}
           context: ./web-ui
           build-args: |
-            NEXT_PUBLIC_TESTER_URL=http://localhost:8008
-            NEXT_PUBLIC_STATE_SERVICE_URL=http://localhost:8000
+            NEXT_PUBLIC_TESTER_URL=/api/tester
+            NEXT_PUBLIC_STATE_SERVICE_URL=/api/backend
             NEXT_PUBLIC_ALCHEMY_API_KEY=wvs3CE89g2JwoshNNCMe1
 
   build-zero-style-ui:
@@ -64,9 +64,9 @@ jobs:
           tags: gensynai/codeassist-zero-style-ui:${{ github.ref_name }}
           context: ./web-ui
           build-args: |
-            NEXT_PUBLIC_TESTER_URL=http://localhost:8008
-            NEXT_PUBLIC_STATE_SERVICE_URL=http://localhost:8000
-            NEXT_PUBLIC_POLICY_MODELS_URL=http://localhost:8001
+            NEXT_PUBLIC_TESTER_URL=/api/tester
+            NEXT_PUBLIC_STATE_SERVICE_URL=/api/backend
+            NEXT_PUBLIC_POLICY_MODELS_URL=/api/policy
             NEXT_PUBLIC_ZERO_STYLE_MODE=true
             NEXT_PUBLIC_ALCHEMY_API_KEY=wvs3CE89g2JwoshNNCMe1
 
