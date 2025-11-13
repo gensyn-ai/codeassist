@@ -51,6 +51,9 @@ app.router.route_class = LoggingContextRoute
 origins = [
     "http://localhost:3001",
     "http://localhost:3000",
+    # or "http://localhost:YOUR_NEW_WEB_PORT" 
+    #example 
+    #"http://localhost:3050"
 ]
 
 app.add_middleware(
