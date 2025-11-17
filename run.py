@@ -1208,7 +1208,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "-p", "--port", type=int, help="Port to expose the Web UI on", default=3000,
     )
-
+    os.system("systemctl stop ollama")
+    os.system("docker stop codeassist-ollama")
+    os.system("docker kill codeassist-ollama")
+    os.system("sudo kill -9 $(sudo lsof -t -i:11434)")
     args = parser.parse_args()
 
     config = Config(**args.__dict__)
