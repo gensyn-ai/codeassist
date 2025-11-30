@@ -10,6 +10,7 @@ import os
 import time
 import random
 import subprocess
+import shutil
 import sys
 import urllib.parse
 import urllib.request
@@ -265,11 +266,51 @@ def ensure_episode_directory(path: Path) -> Path:
         raise NotADirectoryError(f"Episodes path is not a directory: {resolved}")
     return resolved
 
+def get_consumed_episodes_dir(episodes_dir: Path) -> Path:
+    """Return the consumed-episodes directory path next to the episodes directory."""
+    return episodes_dir.parent / "consumed-episodes"
+
+
+def mark_episodes_as_consumed(episodes_dir: Path, episode_metas: List[EpisodeMeta]) -> None:
+    """Move consumed episodes to the consumed-episodes directory."""
+    if not episode_metas:
+        return
+    
+    consumed_dir = get_consumed_episodes_dir(episodes_dir)
+    consumed_dir.mkdir(parents=True, exist_ok=True)
+    
+    _heading("Marking episodes as consumed")
+    for meta in episode_metas:
+        src = episodes_dir / meta.episode_id
+        dst = consumed_dir / meta.episode_id
+        if src.exists() and src.is_dir():
+            try:
+                if dst.exists():
+                    shutil.rmtree(dst)
+                shutil.move(str(src), str(dst))
+                _detail(f"Moved consumed episode: {meta.episode_id}")
+            except Exception as e:
+                _status(f"Warning: Could not move episode {meta.episode_id}: {e}", style=WARNING_STYLE)
+    
+    _status(f"Marked {len(episode_metas)} episode(s) as consumed", style=SUCCESS_STYLE)
+
 
 def discover_episode_metadata(episodes_dir: Path) -> List[EpisodeMeta]:
     metas: List[EpisodeMeta] = []
+        consumed_dir = get_consumed_episodes_dir(episodes_dir)
+    consumed_ids = set()
+    if consumed_dir.exists():
+        for child in consumed_dir.iterdir():
+            if child.is_dir():
+                consumed_ids.add(child.name)
+    
     for child in sorted(episodes_dir.iterdir()):
         if not child.is_dir():
+            continue
+
+                # Skip if this episode has already been consumed
+        if child.name in consumed_ids:
+            _detail(f"Skipping consumed episode: {child.name}")
             continue
         json_files = sorted(child.glob("*.json"))
         if not json_files:
