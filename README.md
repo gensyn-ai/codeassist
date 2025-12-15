@@ -64,7 +64,7 @@ When the web UI loads, you'll see a login modal where you can log in with email 
 
 Once logged in, you can select Easy, Medium, or Hard problems from the sidebar. CodeAssist will begin recording an episode. Every click, keystroke, edit, or deletion is logged as training feedback.
 
-When you stop typing, CodeAssist takes initiative. It writes directly into your file without any pop-ups or confirmations. Whether you accept, modify, or remove its edits, each interaction contributes to the model’s understanding of your preferences.
+When you stop typing, CodeAssist takes initiative. It writes directly into your file without any pop-ups or confirmations. Whether you accept, modify, or remove its edits, each interaction contributes to the model's understanding of your preferences.
 
 ### Tips & Tricks
 
@@ -112,15 +112,37 @@ If you see lines like the above, it means Docker is not running, or you do not h
 
 ## Bind for 0.0.0.0:3000 failed: port is already allocated
 
-This occurs when there is already a Docker container running that uses port 3000.
-You have two options:
-1.  Stop the other service that is using the port (e.g., if you are running RL Swarm).
-2.  Run CodeAssist on a different port using the `--port` argument:
+This occurs when there is already a Docker container running that uses port 3000 or other required ports.
+
+### Port Configuration
+
+CodeAssist uses multiple services, each with configurable ports. If you encounter port conflicts, you can customize any of the following:
 
 ```bash
-  uv run run.py --port 3001
+uv run run.py --port 3001 --ollama-port 11435 --state-service-port 8002 --solution-tester-port 8009 --policy-model-port 8003
 ```
-> **Note:** When choosing a new port, please avoid `8000`, `8080`, `8001`, `8008`, `3003`, and `11434`, as they are reserved for other CodeAssist services.
+
+#### Available Port Options:
+
+- `--port` : Web UI port (default: 3000)
+- `--ollama-port` : Ollama API port (default: 11434)
+- `--state-service-port` : State Service port (default: 8000)
+- `--solution-tester-port` : Solution Tester port (default: 8008)
+- `--policy-model-port` : Policy Model API port (default: 8001)
+
+#### Examples:
+
+**Change only the Web UI port:**
+```bash
+uv run run.py --port 3001
+```
+
+**Change multiple ports to avoid conflicts:**
+```bash
+uv run run.py --port 3001 --ollama-port 11435
+```
+
+> **Note:** Zero-style UI port is fixed at 3003. When choosing custom ports, avoid `8080` and `3003`, as they may conflict with other services.
 
 # Contributing
 

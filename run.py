@@ -81,6 +81,10 @@ class Config:
     no_sc: bool
     train_only: bool
     port: int
+    ollama_port: int
+    state_service_port: int
+    solution_tester_port: int
+    policy_model_port: int
 
 
 def detect_docker():
@@ -276,7 +280,7 @@ def setup_ollama(config: Config) -> docker.models.containers.Container:
         auto_remove=False,
         name="codeassist-ollama",
         ports={
-            "11434/tcp": 11434,  # Expose Ollama API port
+            "11434/tcp": config.ollama_port, # Expose Ollama API port
         },
         volumes={
             f"{os.getcwd()}/ollama-data": {"bind": "/root/.ollama", "mode": "rw"},
@@ -316,7 +320,7 @@ def setup_web_ui(config: Config) -> docker.models.containers.Container:
         auto_remove=False,
         name="codeassist-web-ui",
         ports={
-            "3000/tcp": config.port,  # Expose Web UI port
+            "3000/tcp": config.port, # Expose Web UI port
         },
         volumes={
             f"{os.getcwd()}/persistent-data": {
@@ -359,7 +363,7 @@ def setup_state_service(config: Config) -> docker.models.containers.Container:
         auto_remove=False,
         name="codeassist-state-service",
         ports={
-            "8000/tcp": 8000,  # Expose State Service port
+            "8000/tcp": config.state_service_port, # Expose State Service port
         },
         environment={
             "OLLAMA_BASE_URL": "http://codeassist-ollama:11434",
@@ -412,7 +416,7 @@ def setup_solution_tester(config: Config) -> docker.models.containers.Container:
         auto_remove=False,
         name="codeassist-solution-tester",
         ports={
-            "8008/tcp": 8008,  # Expose Solution Tester port
+            "8008/tcp": config.solution_tester_port, # Expose Solution Tester port
         },
         volumes={
             f"{os.getcwd()}/persistent-data": {
@@ -454,7 +458,7 @@ def setup_policy_models(config: Config) -> docker.models.containers.Container:
         auto_remove=False,
         name="codeassist-policy-model",
         ports={
-            "8001/tcp": 8001,  # Expose Policy Models API port
+            "8001/tcp": config.policy_model_port, # Expose Policy Models API port
         },
         environment={
             "DEVICE": "cpu",
@@ -506,7 +510,7 @@ def setup_zero_style_ui(config: Config) -> docker.models.containers.Container:
         auto_remove=False,
         name="codeassist-zero-style-ui",
         ports={
-            "3000/tcp": 3003,  # Expose Zero-style UI port
+            "3000/tcp": 3003, # Expose Zero-style UI port
         },
         environment={
             "PERSISTENT_DATA_DIR": "/app/persistent-data",
@@ -639,6 +643,11 @@ def run_training(config: Config) -> bool:
         with open(config_path, "r", encoding="utf-8") as handle:
             training_config = json.load(handle)
         logger.info(f"Loaded training config from {config_path}")
+        
+        # Override training config with custom ports from command line
+        training_config["state_service_url"] = f"http://localhost:{config.state_service_port}"
+        logger.info(f"Updated training config: state_service_url=http://localhost:{config.state_service_port}")
+        
     except Exception as exc:  # pragma: no cover - defensive file handling
         logger.error(f"Failed to load training config: {exc}")
         CONSOLE.print(f"Failed to load training config: {exc}", style=ERROR_COLOR)
@@ -776,7 +785,7 @@ def run_training(config: Config) -> bool:
     return False
 
 
-def await_testing_queue_completion():
+def await_testing_queue_completion(config: Config):
     """Poll the testing queue status every 10 seconds until it's empty or max attempts reached."""
     CONSOLE.print("Polling testing queue status...", style=INFO_COLOR)
 
@@ -788,7 +797,7 @@ def await_testing_queue_completion():
         try:
             # Make request to the test queue status endpoint
             response = requests.get(
-                "http://localhost:8000/test-queue/status", timeout=5
+                f"http://localhost:{config.state_service_port}/test-queue/status", timeout=5
             )
 
             if response.status_code == 200:
@@ -833,7 +842,7 @@ def await_testing_queue_completion():
     return False
 
 
-def upload_to_huggingface(hf_token: str, folder_path: Path):
+def upload_to_huggingface(hf_token: str, folder_path: Path, config: Config):
     logger.info("Uploading model data to HuggingFace...")
     CONSOLE.print("Uploading model data to HuggingFace...", style=INFO_COLOR)
 
@@ -944,8 +953,8 @@ def start_containers(config: Config):
         progress.update(task, advance=1)
 
         # Check Ollama API
-        if not requests.get("http://localhost:11434").ok:
-            raise Exception("Ollama API is not reachable at http://localhost:11434")
+        if not requests.get(f"http://localhost:{config.ollama_port}").ok:
+            raise Exception(f"Ollama API is not reachable at http://localhost:{config.ollama_port}")
 
         CONSOLE.print("Ollama is healthy.", style=LOG_COLOR)
         progress.update(task, advance=1)
@@ -1109,7 +1118,7 @@ CCCCCCCCCCCCCCC                        CC                        CCCCCCCCCCCCCCC
 
         # Poll testing queue status every 10 seconds until it's empty
         CONSOLE.print("Waiting for testing queue to complete...", style=INFO_COLOR)
-        await_testing_queue_completion()
+        await_testing_queue_completion(config)
 
         # Quick sweep for processed episode snapshots before training
         episodes_dir = PERSISTENT_DATA_DIR / "state-service" / "episodes"
@@ -1158,6 +1167,7 @@ CCCCCCCCCCCCCCC                        CC                        CCCCCCCCCCCCCCC
         upload_to_huggingface(
             HF_TOKEN,
             folder_path=PERSISTENT_DATA_DIR / "trainer/models",
+            config=config,
         )
 
 
@@ -1207,6 +1217,18 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "-p", "--port", type=int, help="Port to expose the Web UI on", default=3000,
+    )
+    parser.add_argument(
+        "--ollama-port", type=int, help="Port to expose Ollama on", default=11434,
+    )
+    parser.add_argument(
+        "--state-service-port", type=int, help="Port to expose State Service on", default=8000,
+    )
+    parser.add_argument(
+        "--solution-tester-port", type=int, help="Port to expose Solution Tester on", default=8008,
+    )
+    parser.add_argument(
+        "--policy-model-port", type=int, help="Port to expose Policy Model on", default=8001,
     )
 
     args = parser.parse_args()
