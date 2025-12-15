@@ -12,7 +12,8 @@ import os
 import webbrowser as browser
 import shutil
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Dict, Optional
 from pathlib import Path
 from rich.console import Console
 from rich.markdown import Markdown
@@ -81,6 +82,18 @@ class Config:
     no_sc: bool
     train_only: bool
     port: int
+
+
+@dataclass
+class ServiceConfig:
+    name: str
+    image_name: str
+    image_tag: str
+    ports: Optional[Dict[str, int]] = None
+    volumes: Optional[Dict[str, Dict[str, str]]] = None
+    environment: Optional[Dict[str, str]] = None
+    network: Optional[str] = None
+    health_check_url: Optional[str] = None
 
 
 def detect_docker():
@@ -194,6 +207,50 @@ def wait_for_http_service(url: str, name: str, timeout: int = 120, interval: int
     )
 
 
+def setup_service(config: Config, service_cfg: ServiceConfig) -> docker.models.containers.Container:
+    global DOCKER_CLIENT
+    image = f"{service_cfg.image_name}:{service_cfg.image_tag}"
+    container_name = service_cfg.name
+
+    CONSOLE.print(f"Setting up {container_name}...", style=LOG_COLOR)
+    logger.info(f"Checking for existing {container_name} container...")
+
+    try:
+        DOCKER_CLIENT.containers.get(container_name).remove(force=True)
+        logger.info(f"Removed existing {container_name} container.")
+    except docker.errors.NotFound:
+        logger.info(f"No existing {container_name} container found.")
+
+    if not config.no_pull:
+        logger.info(f"Pulling image {image}...")
+        DOCKER_CLIENT.images.pull(image)
+        logger.info(f"Image {image} pulled successfully.")
+
+    logger.info(f"Starting {container_name} container...")
+    container = DOCKER_CLIENT.containers.run(
+        image,
+        detach=True,
+        network=service_cfg.network,
+        auto_remove=False,
+        name=container_name,
+        ports=service_cfg.ports,
+        volumes=service_cfg.volumes,
+        environment=service_cfg.environment,
+    )
+
+    logger.info(f"{container_name} container started with ID: {container.id}")
+    CONSOLE.print(f"{container_name} started", style=LOG_COLOR)
+
+    if service_cfg.health_check_url:
+        try:
+            wait_for_http_service(service_cfg.health_check_url, container_name)
+            CONSOLE.print(f"{container_name} is reachable at {service_cfg.health_check_url}", style=LOG_COLOR)
+        except TimeoutError as exc:
+            logger.warning(str(exc))
+
+    return container
+
+
 def setup_persistent_volume():
     """Set up the persistent volume directory structure."""
 
@@ -247,237 +304,6 @@ def ensure_network(config: Config) -> docker.models.networks.Network:
     except docker.errors.NotFound:
         network = DOCKER_CLIENT.networks.create(config.network_name)
     return network
-
-
-def setup_ollama(config: Config) -> docker.models.containers.Container:
-    global DOCKER_CLIENT
-    image = f"ollama/ollama:{config.ollama_tag}"
-
-    CONSOLE.print("Setting up Ollama...", style=LOG_COLOR)
-
-    logger.info("Checking for existing Ollama containers...")
-    try:
-        DOCKER_CLIENT.containers.get("codeassist-ollama").remove(force=True)
-        logger.info("Removed existing Ollama container.")
-    except docker.errors.NotFound:
-        logger.info("No existing Ollama container found.")
-
-    if not config.no_pull:
-        logger.info(f"Pulling Ollama image at tag {config.ollama_tag}...")
-        DOCKER_CLIENT.images.pull(image)
-        logger.info("Ollama image pulled successfully.")
-
-    logger.info("Starting Ollama container...")
-
-    container = DOCKER_CLIENT.containers.run(
-        image,
-        detach=True,
-        network=config.network_name,
-        auto_remove=False,
-        name="codeassist-ollama",
-        ports={
-            "11434/tcp": 11434,  # Expose Ollama API port
-        },
-        volumes={
-            f"{os.getcwd()}/ollama-data": {"bind": "/root/.ollama", "mode": "rw"},
-        },
-    )
-
-    logger.info(f"Ollama container started with ID: {container.id}")
-
-    CONSOLE.print("Ollama started", style=LOG_COLOR)
-
-    return container
-
-
-def setup_web_ui(config: Config) -> docker.models.containers.Container:
-    global DOCKER_CLIENT
-    image = f"gensynai/codeassist-web-ui:{config.branch}"
-
-    CONSOLE.print("Setting up Web UI...", style=LOG_COLOR)
-
-    logger.info("Checking for existing Web UI containers...")
-    try:
-        DOCKER_CLIENT.containers.get("codeassist-web-ui").remove(force=True)
-        logger.info("Removed existing Web UI container.")
-    except docker.errors.NotFound:
-        logger.info("No existing Web UI container found.")
-
-    if not config.no_pull:
-        logger.info(f"Pulling Web UI image at tag {config.branch}...")
-        DOCKER_CLIENT.images.pull(image)
-        logger.info("Web UI image pulled successfully.")
-
-    logger.info("Starting Web UI container...")
-    container = DOCKER_CLIENT.containers.run(
-        image,
-        detach=True,
-        network=config.network_name,
-        auto_remove=False,
-        name="codeassist-web-ui",
-        ports={
-            "3000/tcp": config.port,  # Expose Web UI port
-        },
-        volumes={
-            f"{os.getcwd()}/persistent-data": {
-                "bind": "/app/persistent-data",
-                "mode": "rw",
-            },
-        },
-    )
-
-    logger.info(f"Web UI container started with ID: {container.id}")
-
-    CONSOLE.print("Web UI started", style=LOG_COLOR)
-
-    return container
-
-
-def setup_state_service(config: Config) -> docker.models.containers.Container:
-    global DOCKER_CLIENT
-    image = f"gensynai/codeassist-state-service:{config.branch}"
-
-    CONSOLE.print("Setting up State Service...", style=LOG_COLOR)
-
-    logger.info("Checking for existing State Service containers...")
-    try:
-        DOCKER_CLIENT.containers.get("codeassist-state-service").remove(force=True)
-        logger.info("Removed existing State Service container.")
-    except docker.errors.NotFound:
-        logger.info("No existing State Service container found.")
-
-    if not config.no_pull:
-        logger.info(f"Pulling State Service image at tag {config.branch}...")
-        DOCKER_CLIENT.images.pull(image)
-        logger.info("State Service image pulled successfully.")
-
-    logger.info("Starting State Service container...")
-    container = DOCKER_CLIENT.containers.run(
-        image,
-        detach=True,
-        network=config.network_name,
-        auto_remove=False,
-        name="codeassist-state-service",
-        ports={
-            "8000/tcp": 8000,  # Expose State Service port
-        },
-        environment={
-            "OLLAMA_BASE_URL": "http://codeassist-ollama:11434",
-            "OLLAMA_HOST": "http://codeassist-ollama:11434",
-            "PERSISTENT_DATA_DIR": "/app/persistent-data",
-            "SOLUTION_TESTER_BASE_URL": "http://codeassist-solution-tester:8008",
-            "POLICY_MODEL_BASE_URL": "http://codeassist-policy-model:8001",
-            "TELEMETRY_BASE_URL": "https://telemetry-api.internal-apps-central1.clusters.gensyn.ai",
-            "DISABLE_TELEMETRY": "true" if config.no_telemetry else "false",
-            "CODEASSIST_VERSION": CODEASSIST_VERSION,
-        },
-        volumes={
-            f"{os.getcwd()}/persistent-data": {
-                "bind": "/app/persistent-data",
-                "mode": "rw",
-            },
-            f"{os.getcwd()}/datasets": {"bind": "/app/datasets", "mode": "ro"},
-        },
-    )
-
-    logger.info(f"State Service container started with ID: {container.id}")
-    CONSOLE.print("State Service started", style=LOG_COLOR)
-
-    return container
-
-
-def setup_solution_tester(config: Config) -> docker.models.containers.Container:
-    global DOCKER_CLIENT
-    image = f"gensynai/codeassist-solution-tester:{config.branch}"
-
-    CONSOLE.print("Setting up Solution Tester...", style=LOG_COLOR)
-
-    logger.info("Checking for existing Solution Tester containers...")
-    try:
-        DOCKER_CLIENT.containers.get("codeassist-solution-tester").remove(force=True)
-        logger.info("Removed existing Solution Tester container.")
-    except docker.errors.NotFound:
-        logger.info("No existing Solution Tester container found.")
-
-    if not config.no_pull:
-        logger.info(f"Pulling Solution Tester image at tag {config.branch}...")
-        DOCKER_CLIENT.images.pull(image)
-        logger.info("Solution Tester image pulled successfully.")
-
-    logger.info("Starting Solution Tester container...")
-    container = DOCKER_CLIENT.containers.run(
-        image,
-        detach=True,
-        network=config.network_name,
-        auto_remove=False,
-        name="codeassist-solution-tester",
-        ports={
-            "8008/tcp": 8008,  # Expose Solution Tester port
-        },
-        volumes={
-            f"{os.getcwd()}/persistent-data": {
-                "bind": "/app/persistent-data",
-                "mode": "rw",
-            },
-        },
-    )
-
-    logger.info(f"Solution Tester container started with ID: {container.id}")
-    CONSOLE.print("Solution Tester started", style=LOG_COLOR)
-
-    return container
-
-
-def setup_policy_models(config: Config) -> docker.models.containers.Container:
-    global DOCKER_CLIENT
-    image = f"gensynai/codeassist-policy-model:{config.branch}"
-
-    CONSOLE.print("Setting up Policy Models...", style=LOG_COLOR)
-
-    logger.info("Checking for existing Policy Models containers...")
-    try:
-        DOCKER_CLIENT.containers.get("codeassist-policy-model").remove(force=True)
-        logger.info("Removed existing Policy Models container.")
-    except docker.errors.NotFound:
-        logger.info("No existing Policy Models container found.")
-
-    if not config.no_pull:
-        logger.info(f"Pulling Policy Models image at tag {config.branch}...")
-        DOCKER_CLIENT.images.pull(image)
-        logger.info("Policy Models image pulled successfully.")
-
-    logger.info("Starting Policy Models container...")
-    container = DOCKER_CLIENT.containers.run(
-        image,
-        detach=True,
-        network=config.network_name,
-        auto_remove=False,
-        name="codeassist-policy-model",
-        ports={
-            "8001/tcp": 8001,  # Expose Policy Models API port
-        },
-        environment={
-            "DEVICE": "cpu",
-            "OLLAMA_BASE_URL": "http://codeassist-ollama:11434",
-            "OLLAMA_HOST": "http://codeassist-ollama:11434",
-            "PERSISTENT_DATA_DIR": "/app/persistent-data",
-            "ASM_ASSISTANT_MODEL_PATH": "/app/persistent-data/trainer/models/asm_assistant_model.pt",
-            "ASM_FEATURIZER_PATH": "/app/persistent-data/trainer/models/asm_featurizer.pt",
-            "TELEMETRY_BASE_URL": "https://telemetry-api.internal-apps-central1.clusters.gensyn.ai",
-            "DISABLE_TELEMETRY": "true" if config.no_telemetry else "false",
-        },
-        volumes={
-            f"{os.getcwd()}/persistent-data": {
-                "bind": "/app/persistent-data",
-                "mode": "rw",
-            },
-        },
-    )
-
-    logger.info(f"Policy Models container started with ID: {container.id}")
-    CONSOLE.print("Policy Models started", style=LOG_COLOR)
-
-    return container
 
 
 def setup_zero_style_ui(config: Config) -> docker.models.containers.Container:
@@ -892,70 +718,151 @@ def upload_to_huggingface(hf_token: str, folder_path: Path):
     )
 
 
+def _get_ollama_config(config: Config) -> ServiceConfig:
+    return ServiceConfig(
+        name="codeassist-ollama",
+        image_name="ollama/ollama",
+        image_tag=config.ollama_tag,
+        ports={"11434/tcp": 11434},
+        volumes={
+            f"{os.getcwd()}/ollama-data": {"bind": "/root/.ollama", "mode": "rw"}
+        },
+        network=config.network_name,
+        health_check_url="http://localhost:11434",
+    )
+
+
+def _get_policy_models_config(config: Config) -> ServiceConfig:
+    return ServiceConfig(
+        name="codeassist-policy-model",
+        image_name="gensynai/codeassist-policy-model",
+        image_tag=config.branch,
+        ports={"8001/tcp": 8001},
+        volumes={
+            f"{os.getcwd()}/persistent-data": {
+                "bind": "/app/persistent-data",
+                "mode": "rw",
+            }
+        },
+        environment={
+            "DEVICE": "cpu",
+            "OLLAMA_BASE_URL": "http://codeassist-ollama:11434",
+            "OLLAMA_HOST": "http://codeassist-ollama:11434",
+            "PERSISTENT_DATA_DIR": "/app/persistent-data",
+            "ASM_ASSISTANT_MODEL_PATH": "/app/persistent-data/trainer/models/asm_assistant_model.pt",
+            "ASM_FEATURIZER_PATH": "/app/persistent-data/trainer/models/asm_featurizer.pt",
+            "TELEMETRY_BASE_URL": "https://telemetry-api.internal-apps-central1.clusters.gensyn.ai",
+            "DISABLE_TELEMETRY": "true" if config.no_telemetry else "false",
+        },
+        network=config.network_name,
+    )
+
+
+def _get_web_ui_config(config: Config) -> ServiceConfig:
+    return ServiceConfig(
+        name="codeassist-web-ui",
+        image_name="gensynai/codeassist-web-ui",
+        image_tag=config.branch,
+        ports={"3000/tcp": config.port},
+        volumes={
+            f"{os.getcwd()}/persistent-data": {
+                "bind": "/app/persistent-data",
+                "mode": "rw",
+            }
+        },
+        network=config.network_name,
+    )
+
+
+def _get_state_service_config(config: Config, codeassist_version: str) -> ServiceConfig:
+    return ServiceConfig(
+        name="codeassist-state-service",
+        image_name="gensynai/codeassist-state-service",
+        image_tag=config.branch,
+        ports={"8000/tcp": 8000},
+        volumes={
+            f"{os.getcwd()}/persistent-data": {
+                "bind": "/app/persistent-data",
+                "mode": "rw",
+            },
+            f"{os.getcwd()}/datasets": {"bind": "/app/datasets", "mode": "ro"},
+        },
+        environment={
+            "OLLAMA_BASE_URL": "http://codeassist-ollama:11434",
+            "OLLAMA_HOST": "http://codeassist-ollama:11434",
+            "PERSISTENT_DATA_DIR": "/app/persistent-data",
+            "SOLUTION_TESTER_BASE_URL": "http://codeassist-solution-tester:8008",
+            "POLICY_MODEL_BASE_URL": "http://codeassist-policy-model:8001",
+            "TELEMETRY_BASE_URL": "https://telemetry-api.internal-apps-central1.clusters.gensyn.ai",
+            "DISABLE_TELEMETRY": "true" if config.no_telemetry else "false",
+            "CODEASSIST_VERSION": codeassist_version,
+        },
+        network=config.network_name,
+    )
+
+
+def _get_solution_tester_config(config: Config) -> ServiceConfig:
+    return ServiceConfig(
+        name="codeassist-solution-tester",
+        image_name="gensynai/codeassist-solution-tester",
+        image_tag=config.branch,
+        ports={"8008/tcp": 8008},
+        volumes={
+            f"{os.getcwd()}/persistent-data": {
+                "bind": "/app/persistent-data",
+                "mode": "rw",
+            }
+        },
+        network=config.network_name,
+    )
+
+
 def start_containers(config: Config):
-    ollama_container = None
-    policy_models_container = None
-    web_ui_container = None
-    state_service_container = None
-    solution_tester_container = None
+    global CODEASSIST_VERSION
+    service_configs = [
+        _get_ollama_config(config),
+        _get_policy_models_config(config),
+        _get_web_ui_config(config),
+        _get_state_service_config(config, CODEASSIST_VERSION),
+        _get_solution_tester_config(config),
+    ]
+
+    containers = []
+
     with Progress(
         TextColumn("[cyan]Setting up containers..."),
         BarColumn(),
         MofNCompleteColumn(),
         console=CONSOLE,
     ) as progress:
-        task = progress.add_task("[cyan]Setting up containers...", total=5)
+        task = progress.add_task("[cyan]Setting up containers...", total=len(service_configs))
 
-        ollama_container = setup_ollama(config)
-        progress.update(task, advance=1)
-
-        policy_models_container = setup_policy_models(config)
-        progress.update(task, advance=1)
-
-        web_ui_container = setup_web_ui(config)
-        progress.update(task, advance=1)
-
-        state_service_container = setup_state_service(config)
-        progress.update(task, advance=1)
-
-        solution_tester_container = setup_solution_tester(config)
-        progress.update(task, advance=1)
-
+        for cfg in service_configs:
+            container = setup_service(config, cfg)
+            containers.append(container)
+            progress.update(task, advance=1)
     with Progress(
         TextColumn("[cyan]Waiting for containers to come online..."),
         BarColumn(),
         MofNCompleteColumn(),
         console=CONSOLE,
     ) as progress:
+        healthcheck_containers = [c for c in containers if c.name != "codeassist-ollama"]
         task = progress.add_task(
-            "[cyan]Waiting for containers to come online...", total=5
+            "[cyan]Waiting for containers to come online...", total=len(healthcheck_containers)
         )
-
-        wait_for_healthy(policy_models_container)
-        progress.update(task, advance=1)
-
-        wait_for_healthy(web_ui_container)
-        progress.update(task, advance=1)
-
-        wait_for_healthy(state_service_container)
-        progress.update(task, advance=1)
-
-        wait_for_healthy(solution_tester_container)
-        progress.update(task, advance=1)
-
-        # Check Ollama API
-        if not requests.get("http://localhost:11434").ok:
-            raise Exception("Ollama API is not reachable at http://localhost:11434")
-
+        for container in healthcheck_containers:
+            wait_for_healthy(container)
+            progress.update(task, advance=1)
         CONSOLE.print("Ollama is healthy.", style=LOG_COLOR)
-        progress.update(task, advance=1)
+    container_map = {c.name: c for c in containers}
 
     return (
-        ollama_container,
-        web_ui_container,
-        state_service_container,
-        solution_tester_container,
-        policy_models_container,
+        container_map["codeassist-ollama"],
+        container_map["codeassist-web-ui"],
+        container_map["codeassist-state-service"],
+        container_map["codeassist-solution-tester"],
+        container_map["codeassist-policy-model"],
     )
 
 
