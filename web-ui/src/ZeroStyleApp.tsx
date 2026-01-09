@@ -96,7 +96,7 @@ function getZeroStyleParams(): {
     assistantNoiseTopK,
   };
 }
-// TODO: inference_human timestep is currently incorrect
+
 function ZeroStyleApp() {
   const [problem, setProblem] = useState<Problem | null>(null);
   const [initCode, setInitCode] = useState("");
