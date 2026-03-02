@@ -1,6 +1,8 @@
 
 # CodeAssist - AI Programming Assistant
 
+> **Note: As we shift focus to Mainnet, we've stopped tracking new CodeAssist participation on Testnet. All historical data remains on-chain.**
+
 CodeAssist is a completely private and local AI coding assistant, developed by Gensyn. It helps you practice programming problems and train a novel assistant to help you code.
 
 Unlike typical code assistants, CodeAssist writes directly in your editor as you work. Every keystroke - whether you type, fix, delete, or leave its output untouched - becomes a learning signal. Over time, it adapts to your habits and style, acting more like an apprentice learning from your craft than a tool following commands.
