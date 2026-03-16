@@ -52,14 +52,18 @@ export async function GET(request: NextRequest) {
       }
 
       // Get the specific timestep line
-      if (timestepNum > lines.length) {
+      // File structure: Line 0 = Header, Line 1 = timestep 0, Line 2 = timestep 1, etc.
+      // So timestep N is at line index N+1
+      const lineIndex = timestepNum + 1;
+      
+      if (lineIndex >= lines.length) {
         return NextResponse.json(
-          { error: `Timestep ${timestepNum} exceeds available lines (${lines.length})` },
+          { error: `Timestep ${timestepNum} exceeds available data (max timestep: ${lines.length - 2})` },
           { status: 400 }
         );
       }
 
-      const timestepLine = lines[timestepNum]; // Timestep[i] is on line i+1
+      const timestepLine = lines[lineIndex];
       const timestepData = JSON.parse(timestepLine);
 
       const text = timestepData.text || '';
