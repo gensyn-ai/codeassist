@@ -41,7 +41,8 @@ RUN npm run build
 
 FROM base AS runner
 
-RUN apk upgrade --no-cache ca-certificates ca-certificates-bundle
+RUN apk upgrade --no-cache ca-certificates ca-certificates-bundle \
+    && apk version -t "$(apk info -e -v ca-certificates-bundle | sed 's/^ca-certificates-bundle-//')" 20261020-r0 | grep -qv '<'
 
 WORKDIR /app
 
