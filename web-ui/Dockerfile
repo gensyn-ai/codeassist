@@ -40,6 +40,9 @@ RUN npm run build
 
 
 FROM base AS runner
+
+RUN apk upgrade --no-cache ca-certificates ca-certificates-bundle
+
 WORKDIR /app
 
 RUN apk --no-cache add curl
