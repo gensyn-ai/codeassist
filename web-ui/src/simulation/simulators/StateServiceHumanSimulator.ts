@@ -119,8 +119,10 @@ export class StateServiceHumanSimulator implements HumanSimulator {
 
   setInitialTimestep(timestep: number): void {
     console.log("🎯 Setting initial timestep to:", timestep);
-    this.timestep = timestep;
-    console.log("🎯 Timestep after setting:", this.timestep);
+    // The provided timestep represents the last completed state in the attribution log.
+    // The next inference should start from timestep + 1.
+    this.timestep = timestep + 1;
+    console.log("🎯 Next inference will start at timestep:", this.timestep);
   }
 
   getStats(): SimulationStats {
