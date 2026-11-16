@@ -6,7 +6,6 @@ export function Footer() {
       <div style={styles.links}>
         <a style={styles.link} href="https://docs.gensyn.ai/testnet/codeassist" target="_blank" rel="noopener noreferrer">Docs</a>
         <a style={styles.link} href="https://docs.gensyn.ai/testnet/codeassist/using-codeassist" target="_blank" rel="noopener noreferrer">Tutorial</a>
-        <a style={styles.link} href="https://dashboard.gensyn.ai/?application=CodeAssist" target="_blank" rel="noopener noreferrer">Leaderboard</a>
       </div>
     </footer>
   );
